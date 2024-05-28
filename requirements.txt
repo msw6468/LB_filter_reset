@@ -51,7 +51,6 @@ packaging==24.0
 pandas==2.2.2
 parameterized==0.9.0
 parso==0.8.4
-peft==0.4.0.dev0
 pexpect==4.9.0
 pillow==10.3.0
 pip==24.0
@@ -68,7 +67,6 @@ pycparser==2.22
 Pygments==2.18.0
 pynvim==0.5.0
 python-dateutil==2.9.0.post0
-pytorchvideo==0.1.5
 pytz==2024.1
 PyYAML==6.0.1
 pyzmq==26.0.3
@@ -106,3 +104,5 @@ xxhash==3.4.1
 yacs==0.1.8
 yarl==1.9.4
 zipp==3.18.2
+peft @ git+https://github.com/huggingface/peft@08cb3dde577747f6ca6638c884fd66fd16cf2e9d
+pytorchvideo @ git+https://github.com/facebookresearch/pytorchvideo.git@28fe037d212663c6a24f373b94cc5d478c8c1a1d

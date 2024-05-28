@@ -210,7 +210,7 @@ class HowTo100M(BaseDataset):
         if self.args.frame_load == 'hdf5':
             try:
                 # Load from frame -----------------------------------------
-                binary_images = self.hdf5_file[video_id][text_id*16: (text_id+1)*16][self.frame_idxs]
+                binary_images = self.hdf5_file[video_id][text_id*8: (text_id+1)*8][self.frame_idxs]
                 images = torch.zeros((self.max_frames, 224, 224, 3))
 
                 for i, binary_image in enumerate(binary_images):
@@ -341,8 +341,8 @@ def main(args):
         print(f'[Current_dataset] Validity check on video_id[{start}:{end}]')
         valid_current_video_ids = []
         for current_video_id in tqdm(current_video_ids):
-            current_video_id_process_flag = os.path.exists(os.path.join(LOAD_DIR[args.dir_name], 'sparse_sample_flag', current_video_id))
-            current_video_id_done_flag    = os.path.exists(os.path.join(LOAD_DIR[args.dir_name], 'final_flag',         current_video_id))
+            current_video_id_process_flag = os.path.exists(os.path.join(args.root_path, 'preprocessed_flag', current_video_id))
+            current_video_id_done_flag    = os.path.exists(os.path.join(args.root_path, 'final_flag',        current_video_id))
             if not args.debug:
                 if current_video_id_process_flag & (not current_video_id_done_flag):
                     valid_current_video_ids.append(current_video_id)
@@ -356,7 +356,7 @@ def main(args):
             continue
         # ------------------------------------------------------------------
 
-        dataset  = HowTo100M(args                   = args, 
+        dataset  = HowTo100M(args                   = args,
                             valid_current_video_ids = valid_current_video_ids,
                             tokenizer               = tokenizer,
                             processor               = transform,
@@ -376,16 +376,15 @@ def main(args):
         clip_sim_dict = {}
         step = 0
         with torch.no_grad():
-            result = pd.DataFrame(columns = ['video_id', 'text_id', 'raw_text', 'similarity'])
             for batch in tqdm(dataloader):
                 video_ids, text_ids, frames, raw_texts, valid_flag = batch
-                video_ids = np.array(video_ids)[np.array(valid_flag)] 
+                video_ids = np.array(video_ids)[np.array(valid_flag)]
                 raw_texts = list(np.array(raw_texts)[np.array(valid_flag)])
                 text_ids  = text_ids[valid_flag]
-                texts     = dataset.tokenizer(raw_texts, 
-                                        max_length=dataset.max_words, 
+                texts     = dataset.tokenizer(raw_texts,
+                                        max_length=dataset.max_words,
                                         padding='max_length',
-                                        truncation=True, 
+                                        truncation=True,
                                         return_tensors='pt')
 
                 frames                  = frames[valid_flag].to(args.device)
