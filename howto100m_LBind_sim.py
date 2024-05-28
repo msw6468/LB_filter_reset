@@ -373,8 +373,12 @@ def main(args):
         clip_sim_dict = {}
         step = 0
         with torch.no_grad():
-            for batch in tqdm(dataloader):
+            pbar = tqdm(dataloader)
+            for batch in pbar:
+                pbar.set_description(f"[{args.part:2d}/{args.total:2d}] [{start}:{end}({len(valid_current_video_ids)}) in {len(total_video_ids)} ({100*end/len(total_video_ids):.2f}%)] [#clips: {len(dataset)}]")
                 video_ids, text_ids, frames, raw_texts, valid_flag = batch
+                if np.sum(np.array(valid_flag)) == 0:
+                    continue
                 video_ids = np.array(video_ids)[np.array(valid_flag)]
                 raw_texts = list(np.array(raw_texts)[np.array(valid_flag)])
                 text_ids  = text_ids[valid_flag]
