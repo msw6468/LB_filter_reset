@@ -30,17 +30,113 @@ from tqdm import tqdm
 
 # For LanguageBind
 from languagebind import LanguageBind, to_device, transform_dict, LanguageBindImageTokenizer
-import cv2
 from pprint import pprint
 
 OPENAI_DATASET_MEAN = (0.48145466, 0.4578275,  0.40821073)
 OPENAI_DATASET_STD  = (0.26862954, 0.26130258, 0.27577711)
 
-
 LOAD_DIR = {
-    'ai2'  : '',
-    'align' : '/gallery_tate/dongyeon.woo/howto100m/howtoalign',
-    'tate' : '/gallery_tate/dongyeon.woo/howto100m/howtoalign',}
+    'ai2'    : '/net/nfs3.prior/dongjook/',
+    'align'  : '/gallery_tate/dongyeon.woo/howto100m/howtoalign',}
+
+# utils ----------------------------------------------------------
+
+def get_LB_model(args):
+    clip_type = {'video': 'LanguageBind_Video_FT',}  # also LanguageBind_Video
+    # model     = LanguageBind(clip_type=clip_type, cache_dir='./cache_dir')
+    cache_dir = '/net/nfs3.prior/dongjook/Language_Bind_cache'
+    model     = LanguageBind(clip_type=clip_type, cache_dir=cache_dir)
+    model     = model.to(args.device)
+    pretrained_ckpt = f'LanguageBind/LanguageBind_Image'
+    tokenizer = LanguageBindImageTokenizer.from_pretrained(pretrained_ckpt, cache_dir=f'{cache_dir}/tokenizer_cache_dir')
+    transform = Compose(
+            [
+                # UniformTemporalSubsample(num_frames),
+                Lambda(lambda x: x / 255.0),
+                NormalizeVideo(mean=OPENAI_DATASET_MEAN, std=OPENAI_DATASET_STD),
+                ShortSideScale(size=224),
+                CenterCropVideo(224),
+                RandomHorizontalFlipVideo(p=0.5),
+            ])
+    model.eval()
+
+    return model, transform, tokenizer
+
+def get_total_video_dict(args):
+    if args.dir_name == 'ai2':
+        # e.g., /home/dongjook/data/nfs/730k/sentencified_htm_730k_part{4-9}}.json
+        # e.g., /home/dongjook/data/nfs/subset/sentencified_htm_subset_part{0-3}.json
+        file_name = f'sentencified_htm_{args.data_version}_part{args.meta_part}.json'
+        with open(os.path.join(args.root_path, file_name), 'r') as f:
+            total_video_dict = json.load(f)
+
+    elif args.dir_name == 'align':
+        with open(os.path.join(LOAD_DIR[args.dir_name], 'htm_align_reformatted.json'), 'r') as f:
+            total_video_dict = json.load(f)
+
+    elif args.data_version == 'subset':
+        with open(os.path.join('/gallery_tate/dongyeon.woo/howto10m/sentencified_htm_subset.json'), 'r') as f:
+            total_video_dict = json.load(f)
+
+    else:
+        root_path = '/gallery_tate/dongyeon.woo/howto100m/sentencified/'
+        file_name = f'sentencified_htm_{args.data_version}_part{args.meta_part}.json'
+        with open(os.path.join(root_path, file_name), 'r') as f:
+            total_video_dict = json.load(f)
+
+    return total_video_dict
+
+
+def get_partitioned_dict(args, total_video_dict):
+    if args.total==1:
+        return total_video_dict
+
+    if args.total > 1:
+        total_video_list  = list(total_video_dict.keys())
+        part, total       = args.part,  args.total
+        total_size        = len(total_video_dict)
+        part_size         = int(total_size / total)
+
+        start             = part_size * (part - 1)
+        end               = part_size * (part) if part < total else total_size
+
+        new_total_video_dict = {}
+        total_video_list = total_video_list[start:end]
+        for video_id in total_video_list:
+            new_total_video_dict[video_id] = total_video_dict[video_id]
+        print(f'[PARTITION] Total datasets  : {len(total_video_dict)}, Part: {part}/{total} [{start}:{end}]')
+        print(f'[PARTITION] After partition : {len(new_total_video_dict)}')
+
+    return new_total_video_dict
+
+
+def get_preprocessed_frames_hdf5(args):
+    if args.frame_load == 'hdf5':
+        if args.dir_name == 'ai2':
+            hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_part{args.meta_part}.h5py'),'r')
+        elif args.dir_name == 'align':
+            hdf5_file = h5py.File(os.path.join(LOAD_DIR[args.dir_name], f'preprocessed_frames.h5py'),'r')
+            args.use_hdf5_text_emb = False
+        else:
+            hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_part{args.meta_part}.h5py'),'r')
+            # hdf5_real_text_emb_file = h5py.File(os.path.join(LOAD_DIR[args.dir_name], f'real_text_emb_{args.dir_name}_{args.total}_{args.part}.hdf5'),'r')
+    else:
+        NotImplementedError
+
+    return hdf5_file
+
+def get_h5py_files(args):
+    h5py_f = {}
+    h5py_f['clip_sim_f'] = h5py.File(os.path.join(args.save_path, f'clip_sim_part{args.meta_part}_{args.total}_{args.part}.hdf5'), 'a')
+
+    for key in h5py_f:
+        h5py_f[key].flush()
+        if args.dir_name == 'ai2':
+            os.chmod(h5py_f[key].filename, mode=0o777)
+
+    return h5py_f
+
+# ----------------------------------------------------------------
 
 # ================
 # Generic Datasets
@@ -75,10 +171,8 @@ class HowTo100M(BaseDataset):
         self.data_version = args.data_version
 
         self.max_frames = args.max_frames
-        self.frame_idxs = [0,2,4,6,8,10,12,14] if self.max_frames==8 else [0,1,3,4,5,7,8,9,11,12,13,15]
+        self.frame_idxs = [0,1,2,3,4,5,6,7] if self.max_frames==8 else [0,2,4,6] # UMT case
         self.max_words  = 77
-
-        self.feature_extractor_type = 'cv2'
 
         self.hdf5_file = hdf5_file
 
@@ -101,40 +195,6 @@ class HowTo100M(BaseDataset):
         self.df = df
 
 
-    def _get_text(self, texts):
-        """ Get text information
-        INPUT:
-            texts       : list of text.
-        OUTPUT:
-            text        : tokenized text
-            text_mask   : masking for valid token
-        """
-        if not isinstance(texts, list): texts = [texts]
-        n_caption  = len(texts)
-        text_info = torch.zeros((n_caption, self.max_words), dtype=torch.int)
-        text_mask = torch.zeros((n_caption, self.max_words), dtype=torch.int)
-
-        for i, text in enumerate(texts):
-            words = self.tokenizer.tokenize(text)
-            words = [self.SPECIAL_TOKEN["CLS_TOKEN"]] + words
-            total_length_with_CLS = self.max_words - 1
-            if len(words) > total_length_with_CLS:
-                words = words[:total_length_with_CLS]
-            words = words + [self.SPECIAL_TOKEN["SEP_TOKEN"]]
-
-            input_ids   = self.tokenizer.convert_tokens_to_ids(words)
-            input_mask  = [1] * len(input_ids)
-            while len(input_ids) < self.max_words:
-                input_ids.append(0)
-                input_mask.append(0)
-            assert len(input_ids)   == self.max_words
-            assert len(input_mask)  == self.max_words
-            text_info[i] = torch.tensor(input_ids)
-            text_mask[i] = torch.tensor(input_mask)
-
-        return text_info, text_mask
-
-
     def _get_frames(self, video_id=None, text_id=None):
         """ Get video information
         INPUT:
@@ -155,6 +215,8 @@ class HowTo100M(BaseDataset):
 
                 for i, binary_image in enumerate(binary_images):
                     images[i] = torch.from_numpy(np.array(Image.open(io.BytesIO(binary_image))))
+                # Checking code!
+                # Image.open(io.BytesIO(images[0])).save(f'temp/temp.jpg')
 
                 images = images.permute(3, 0, 1, 2) # (T, H, W, C) -> (C, T, H, W)
                 images = self.processor(images)
@@ -189,6 +251,30 @@ class HowTo100M(BaseDataset):
         return video_id, text_id, frames, raw_text, valid_flag
 
 
+def save_embeds_sims_chunk(args, clip_sim_dict, h5py_f):
+    # Save as single video id
+    for video_id in clip_sim_dict.keys():
+        for key in h5py_f: # To overwrite
+            if video_id in h5py_f[key].keys():
+                del h5py_f[key][video_id]
+        h5py_f['clip_sim_f'].create_dataset(video_id, data = clip_sim_dict[video_id])
+
+    # Flush
+    for key in h5py_f:
+        h5py_f[key].flush()
+
+    # Save flag after flush
+    if not args.debug:
+        for video_id in clip_sim_dict.keys():
+            flag_save_path = os.path.join(args.flag_dir, f'{video_id}')
+            Path(flag_save_path).touch()
+    else:
+        from IPython import embed; embed(colors='neutral')  # XXX DEBUG  # yapf: disable
+
+    return
+
+
+# %%
 def parse_args():
     parser = argparse.ArgumentParser()
     # For partition
@@ -210,66 +296,40 @@ def parse_args():
 
     parser.add_argument("--debug", type=str, default='False')
     parser.add_argument("--frame_load", type=str, default='hdf5', help='[image, hdf5]')
-    parser.add_argument("--max_frames", type=int, default=8, help='[8, 12]')
+    parser.add_argument("--max_frames", type=int, default=8, help='[4,  8, 12]')
 
     return parser.parse_args()
 
+# %%
 def main(args):
     args.debug = True if args.debug == 'True' else False
-    print(f'Debug mode: {args.debug}')
+    args.root_path = os.path.join(LOAD_DIR[args.dir_name], args.data_version)
+    args.save_path = args.root_path if not args.debug else os.path.join(args.root_path, 'debug')
     pprint(args)
+    print(f'Debug mode: {args.debug}')
 
     print('Load model')
-    clip_type = {'video': 'LanguageBind_Video_FT',}  # also LanguageBind_Video
-    model     = LanguageBind(clip_type=clip_type, cache_dir='./cache_dir')
-    model     = model.to(args.device)
-    pretrained_ckpt = f'LanguageBind/LanguageBind_Image'
-    tokenizer = LanguageBindImageTokenizer.from_pretrained(pretrained_ckpt, cache_dir='./cache_dir/tokenizer_cache_dir')
-    transform = Compose(
-            [
-                # UniformTemporalSubsample(num_frames),
-                Lambda(lambda x: x / 255.0),
-                NormalizeVideo(mean=OPENAI_DATASET_MEAN, std=OPENAI_DATASET_STD),
-                ShortSideScale(size=224),
-                CenterCropVideo(224),
-                RandomHorizontalFlipVideo(p=0.5),
-            ])
-    model.eval()
+    model, transform, tokenizer = get_LB_model(args)
+
+
 
     print('Load json(total_video_dict)')
-    if args.dir_name == 'align':
-        with open(os.path.join('/gallery_tate/dongyeon.woo/howto100m/howtoalign/htm_align_reformatted.json'), 'r') as f:
-            total_video_dict = json.load(f)
-    else:
-        with open(os.path.join('/gallery_tate/dongyeon.woo/howto10m/sentencified_htm_subset.json'), 'r') as f:
-            total_video_dict = json.load(f)
-    print(f'Load json(total_video_dict) result: len(self.video_dict) = {len(total_video_dict)}')
+    total_video_dict = get_total_video_dict(args)
+    print(f'Load json(total_video_dict) results: Number of videos = {len(total_video_dict)}')
 
+    # Parsing json files
     print(f'[PARTITION] Select data {args.part}/{args.total}')
-    if args.total > 1:
-        total_video_list  = list(total_video_dict.keys())
-        part, total       = args.part,  args.total
-        total_size        = len(total_video_dict)
-        part_size         = int(total_size / total)
-
-        start             = part_size * (part - 1)
-        end               = part_size * (part) if part < total else total_size
-
-        new_total_video_dict = {}
-        total_video_list = total_video_list[start:end]
-        for video_id in total_video_list:
-            new_total_video_dict[video_id] = total_video_dict[video_id]
-        print(f'[PARTITION] Total dataset: {len(total_video_dict)}, part: {part}/{total} [{start}:{end}]')
-        print(f'[PARTITION] Number of videos: {len(new_total_video_dict)}')
-        total_video_dict = new_total_video_dict
-
+    total_video_dict = get_partitioned_dict(args, total_video_dict)
     total_video_ids = list(total_video_dict.keys())
 
-    print('[PARTITION] Load dataset')
-    if args.frame_load == 'hdf5':
-        hdf5_file = h5py.File(os.path.join(LOAD_DIR[args.dir_name], f'sparse_sample_frames.h5py'),'r')
-    else:
-        NotImplementedError
+    # Set h5py file to save
+    print(f'Set save path on {args.save_path}')
+    args.flag_dir   = os.path.join(args.save_path, 'final_flag')
+    os.makedirs(args.flag_dir, exist_ok=True, mode=0o777)
+    h5py_f = get_h5py_files(args)
+
+    print(f'Load preprocessed_frames')
+    hdf5_file = get_preprocessed_frames_hdf5(args)
 
     for i in range(0, len(total_video_ids), args.num_segment):
         # Check current video ids and check its validity
@@ -281,7 +341,6 @@ def main(args):
         print(f'[Current_dataset] Validity check on video_id[{start}:{end}]')
         valid_current_video_ids = []
         for current_video_id in tqdm(current_video_ids):
-            # current_video_id_process_flag = os.path.join(LOAD_DIR[args.dir_name], 'preprocessed_flag', current_video_id) 
             current_video_id_process_flag = os.path.exists(os.path.join(LOAD_DIR[args.dir_name], 'sparse_sample_flag', current_video_id))
             current_video_id_done_flag    = os.path.exists(os.path.join(LOAD_DIR[args.dir_name], 'final_flag',         current_video_id))
             if not args.debug:
@@ -298,11 +357,11 @@ def main(args):
         # ------------------------------------------------------------------
 
         dataset  = HowTo100M(args                   = args, 
+                            valid_current_video_ids = valid_current_video_ids,
                             tokenizer               = tokenizer,
                             processor               = transform,
-                            valid_current_video_ids = valid_current_video_ids,
-                            hdf5_file               = hdf5_file,
-                            video_dict              = total_video_dict)
+                            video_dict              = total_video_dict,
+                            hdf5_file               = hdf5_file,)
 
         dataloader = DataLoader(
             dataset,
@@ -314,10 +373,8 @@ def main(args):
             shuffle     = False) # Don't need to shuffle for captioning
 
         print('Start batch')
-
+        clip_sim_dict = {}
         step = 0
-        prev_v_id = None # flag for first v_id
-
         with torch.no_grad():
             result = pd.DataFrame(columns = ['video_id', 'text_id', 'raw_text', 'similarity'])
             for batch in tqdm(dataloader):
@@ -341,15 +398,16 @@ def main(args):
 
                 embeddings = model(inputs)
                 similarity = (embeddings['video'] @ embeddings['language'].T).detach().cpu().numpy()
-                cur_result = pd.DataFrame(columns = ['video_id', 'text_id', 'raw_text', 'similarity'])
-                cur_result['video_id']   = video_ids
-                cur_result['text_id']    = text_ids
-                cur_result['raw_text']   = raw_texts
-                cur_result['similarity'] = np.diagonal(similarity)
-                result = pd.concat([result, cur_result], ignore_index=True)
+                similarity = np.diagonal(similarity)
+                for v_id, clip_sim in zip(video_ids, similarity):
+                    if v_id not in clip_sim_dict.keys():
+                        clip_sim_dict[v_id] = clip_sim
+                    else:
+                        clip_sim_dict[v_id] = torch.vstack([clip_sim_dict[v_id], clip_sim])
 
-            result.to_csv(os.path.join(LOAD_DIR[args.dir_name], f'LB_result_{args.total}_{args.part}.csv'))
-            
+                step += 1
+
+            save_embeds_sims_chunk(args, clip_sim_dict, h5py_f,)
 
 
 if __name__ == "__main__":
