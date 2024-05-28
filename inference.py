@@ -22,6 +22,13 @@ if __name__ == '__main__':
     video = ['assets/video/0.mp4', 'assets/video/1.mp4']
     language = ["Training a parakeet to climb up a ladder.", 'A lion climbing a tree to catch a monkey.']
 
+    for i in range(7):
+        video.extend(video)
+        language.extend(language)
+    video = video[:200]
+    language = language[:200]
+    print(len(video), len(language))
+
     inputs = {
         'video': to_device(modality_transform['video'](video), device),
     }
@@ -30,6 +37,7 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         embeddings = model(inputs)
+    from IPython import embed; embed(colors='neutral')  # XXX DEBUG  # yapf: disable
 
     print("Video x Text: \n",
           torch.softmax(embeddings['video'] @ embeddings['language'].T, dim=-1).detach().cpu().numpy())

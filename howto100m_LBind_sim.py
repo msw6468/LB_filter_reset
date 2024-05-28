@@ -399,7 +399,7 @@ def main(args):
                     if v_id not in clip_sim_dict.keys():
                         clip_sim_dict[v_id] = clip_sim
                     else:
-                        clip_sim_dict[v_id] = torch.vstack([clip_sim_dict[v_id], clip_sim])
+                        clip_sim_dict[v_id] = np.vstack([clip_sim_dict[v_id], clip_sim])
 
                 step += 1
 
