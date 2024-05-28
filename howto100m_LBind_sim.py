@@ -279,6 +279,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     # For partition
     parser.add_argument("--dir_name", type=str, default='moma', help="[moma, tate, getty, orsay]")
+    parser.add_argument("--meta_part", type=int, default=1, help="for mulit_running. which part?(1, ..., total)")
     parser.add_argument("--part", type=int, default=1, help="for mulit_running. which part?(1, ..., total)")
     parser.add_argument("--total", type=int, default=1, help="for multi_running. how many parts?")
 
@@ -311,18 +312,14 @@ def main(args):
     print('Load model')
     model, transform, tokenizer = get_LB_model(args)
 
-
-
     print('Load json(total_video_dict)')
     total_video_dict = get_total_video_dict(args)
     print(f'Load json(total_video_dict) results: Number of videos = {len(total_video_dict)}')
 
-    # Parsing json files
     print(f'[PARTITION] Select data {args.part}/{args.total}')
     total_video_dict = get_partitioned_dict(args, total_video_dict)
     total_video_ids = list(total_video_dict.keys())
 
-    # Set h5py file to save
     print(f'Set save path on {args.save_path}')
     args.flag_dir   = os.path.join(args.save_path, 'final_flag')
     os.makedirs(args.flag_dir, exist_ok=True, mode=0o777)
