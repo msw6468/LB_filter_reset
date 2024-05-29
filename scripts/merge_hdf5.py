@@ -44,11 +44,14 @@ def parse_args():
     parser.add_argument("--data_version", type=str,                  help="[subset, 730k, 370k]")
     parser.add_argument("--meta_part",    type=int,                  help="[0, 1, 2, ...]")
     parser.add_argument("--exclude_0",    type=str, default="False", help="[True, False]")
+    parser.add_argument("--debug",        type=str, default="False", help="[True, False]")
+
     return parser.parse_args()
 
 
 def main(args):
     args.exclude_0 = True if args.exclude_0 == "True" else False
+    args.debug     = True if args.debug     == "True" else False
 
     if args.dir_name == 'ai2':
         if args.merge_type == 'merge_all':
@@ -60,11 +63,15 @@ def main(args):
                 target_f    = h5py.File(target_file, 'a')
                 os.chmod(target_f.filename, mode=0o777)
                 source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*_*_*.hdf5'))
+                source_file_list.sort()
                 for source_file in source_file_list:
-                    print(source_file)
-                    # source_f = h5py.File(source_file, 'r')
-                    # for vid in source_f.keys():
-                    #     target_f.create_dataset(vid, data = source_f[vid][...])
+                    if args.debug:
+                        source_f = h5py.File(source_file, 'r')
+                        print(source_f, len(source_f.keys()))
+                    else:
+                        source_f = h5py.File(source_file, 'r')
+                        for vid in source_f.keys():
+                            target_f.create_dataset(vid, data = source_f[vid][...])
                 target_f.flush()
                 target_f.close()
 
