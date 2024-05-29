@@ -24,16 +24,16 @@ META_PART = {
 
 DATA_TYPE = [
     # For Ours
-    # 'preprocessed_frames',
-    # 'frame_emb',
-    # 'real_text_emb',
+    'preprocessed_frames',
+    'frame_emb',
+    'real_text_emb',
+    'real_text_sim',
     # 'synt_text_emb',
-    # 'real_text_sim',
     # 'synt_text',
     # 'synt_text_sim',
 
     # For LB
-    'clip_sim',
+    # 'clip_sim',
     ]
 
 
@@ -41,7 +41,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir_name",     type=str, required=True,   help="[moma, tate, getty, orsay, ai2]")
     parser.add_argument("--merge_type",   type=str, required=True,   help="[merge_meta_part, merge_all]")
-    parser.add_argument("--data_version", type=str,                  help="[subset, 730k, 370k]")
+    parser.add_argument("--data_version", type=str, required=True,   help="[subset, 730k, 370k]")
     parser.add_argument("--meta_part",    type=int,                  help="[0, 1, 2, ...]")
     parser.add_argument("--exclude_0",    type=str, default="False", help="[True, False]")
     parser.add_argument("--debug",        type=str, default="False", help="[True, False]")
