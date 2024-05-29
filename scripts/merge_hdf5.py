@@ -65,7 +65,7 @@ def main(args):
                 source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*_*_*.hdf5'))
                 source_file_list.sort()
                 count = 0
-                for source_file in source_file_list:
+                for source_file in tqdm(source_file_list):
                     if args.debug:
                         source_f = h5py.File(source_file, 'r')
                         source_f_count = len(source_f.keys())
