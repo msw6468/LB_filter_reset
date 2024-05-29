@@ -64,14 +64,18 @@ def main(args):
                 os.chmod(target_f.filename, mode=0o777)
                 source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*_*_*.hdf5'))
                 source_file_list.sort()
+                count = 0
                 for source_file in source_file_list:
                     if args.debug:
                         source_f = h5py.File(source_file, 'r')
-                        print(source_f, len(source_f.keys()))
+                        source_f_count = len(source_f.keys())
+                        count += source_f_count
+                        print(source_f, source_f_count)
                     else:
                         source_f = h5py.File(source_file, 'r')
                         for vid in source_f.keys():
                             target_f.create_dataset(vid, data = source_f[vid][...])
+                print(count)
                 target_f.flush()
                 target_f.close()
 
