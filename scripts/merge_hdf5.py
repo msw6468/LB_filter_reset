@@ -25,9 +25,9 @@ META_PART = {
 DATA_TYPE = [
     # For Ours
     'preprocessed_frames',
-    'frame_emb',
-    'real_text_emb',
-    'real_text_sim',
+    # 'frame_emb',
+    # 'real_text_emb',
+    # 'real_text_sim',
     # 'synt_text_emb',
     # 'synt_text',
     # 'synt_text_sim',
@@ -62,7 +62,10 @@ def main(args):
                 target_file = os.path.join(root_dir, f'{data_type}_total.h5')
                 target_f    = h5py.File(target_file, 'a')
                 os.chmod(target_f.filename, mode=0o777)
-                source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*_*_*.hdf5'))
+                if data_type == 'preprocessed_frames':
+                    source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*.h5py'))
+                else:
+                    source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*_*_*.hdf5'))
                 source_file_list.sort()
                 count = 0
                 for source_file in tqdm(source_file_list):
