@@ -113,10 +113,10 @@ def get_partitioned_dict(args, total_video_dict):
 def get_preprocessed_frames_hdf5(args):
     if args.frame_load == 'hdf5':
         if args.dir_name == 'ai2':
-            if args.data_version == '730k':
-                hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_part{args.meta_part}.h5py'),'r')
             if args.data_version == '370k':
                 hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_total.h5py'),'r')
+            elif args.data_version in ['730k', 'valid']:
+                hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_part{args.meta_part}.h5py'),'r')
 
         elif args.dir_name == 'align':
             hdf5_file = h5py.File(os.path.join(LOAD_DIR[args.dir_name], f'preprocessed_frames.h5py'),'r')
