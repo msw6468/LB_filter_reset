@@ -24,10 +24,10 @@ META_PART = {
 
 DATA_TYPE = [
     # For Ours
-    'preprocessed_frames',
-    # 'frame_emb',
-    # 'real_text_emb',
-    # 'real_text_sim',
+    # 'preprocessed_frames',
+    'frame_emb',
+    'real_text_emb',
+    'real_text_sim',
     # 'synt_text_emb',
     # 'synt_text',
     # 'synt_text_sim',

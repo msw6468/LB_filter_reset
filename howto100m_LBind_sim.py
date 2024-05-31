@@ -129,6 +129,7 @@ def get_preprocessed_frames_hdf5(args):
 
     return hdf5_file
 
+
 def get_h5py_files(args):
     h5py_f = {}
     h5py_f['clip_sim_f'] = h5py.File(os.path.join(args.save_path, f'clip_sim_part{args.meta_part}_{args.total}_{args.part}.hdf5'), 'a')
@@ -293,7 +294,7 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=4)
 
     # others
-    parser.add_argument("--data_version", type=str, default='730k', help="[subset, 1200k, 730k, 370k]")
+    parser.add_argument("--data_version", type=str, default='730k', help="[subset, 1200k, 730k, 370k, valid]")
     parser.add_argument("--feature_extractor", type=str, default='cv2_frames', help="[cv2_video, cv2_frames]")
     parser.add_argument("--model_id", type=str, default='instructblip', help="[blip2, instructblip]")
     parser.add_argument("--num_segment", type=int, default=200)
