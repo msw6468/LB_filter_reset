@@ -345,7 +345,7 @@ def main(args):
         for current_video_id in tqdm(current_video_ids):
             current_video_id_process_flag = os.path.exists(os.path.join(args.root_path, 'preprocessed_flag', current_video_id))
             # current_video_id_done_flag    = os.path.exists(os.path.join(args.root_path, 'final_flag',        current_video_id))
-            current_video_id_done_flag    = (current_video_id in list(h5py_f['clip_sim'].keys()))
+            current_video_id_done_flag    = (current_video_id in list(h5py_f['clip_sim_f'].keys()))
             if not args.debug:
                 if current_video_id_process_flag & (not current_video_id_done_flag):
                     valid_current_video_ids.append(current_video_id)
