@@ -399,10 +399,10 @@ def main(args):
                         clip_emb_dict[v_id] = clip_emb[idx]
                         clip_sim_dict[v_id] = clip_sim[idx]
                     else:
-                        text_ids_dict[v_id] = np.vstack([text_ids_dict[idx], text_ids])
-                        text_emb_dict[v_id] = np.vstack([text_emb_dict[idx], text_emb])
-                        clip_emb_dict[v_id] = np.vstack([clip_emb_dict[idx], clip_emb])
-                        clip_sim_dict[v_id] = np.vstack([clip_sim_dict[idx], clip_sim])
+                        text_ids_dict[v_id] = np.vstack([text_ids_dict[v_id], np.array(text_ids)])
+                        text_emb_dict[v_id] = np.vstack([text_emb_dict[v_id], text_emb])
+                        clip_emb_dict[v_id] = np.vstack([clip_emb_dict[v_id], clip_emb])
+                        clip_sim_dict[v_id] = np.vstack([clip_sim_dict[v_id], clip_sim])
 
                 step += 1
 
