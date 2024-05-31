@@ -4,11 +4,9 @@ warnings.filterwarnings(action='ignore')
 
 import os
 import json
-import pickle
 import h5py
 from pathlib import Path
 from abc import ABC
-from glob import glob
 import io
 
 import numpy as np
@@ -18,7 +16,7 @@ import torch
 import torch.multiprocessing
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataloader import default_collate
-from torchvision.transforms import Compose, Lambda, ToTensor
+from torchvision.transforms import Compose, Lambda
 from torchvision.transforms._transforms_video import NormalizeVideo, RandomHorizontalFlipVideo, CenterCropVideo
 from pytorchvideo.transforms import ShortSideScale
 
@@ -27,28 +25,27 @@ from PIL import Image
 import argparse
 import colorful
 from tqdm import tqdm
+from pprint import pprint
 
 # For LanguageBind
-from languagebind import LanguageBind, to_device, transform_dict, LanguageBindImageTokenizer
-from pprint import pprint
+from languagebind import LanguageBind, LanguageBindImageTokenizer
+# from languagebind import to_device, transform_dict
 
 OPENAI_DATASET_MEAN = (0.48145466, 0.4578275,  0.40821073)
 OPENAI_DATASET_STD  = (0.26862954, 0.26130258, 0.27577711)
 
 LOAD_DIR = {
-    'ai2'    : '/net/nfs3.prior/dongjook/',
-    'align'  : '/gallery_tate/dongyeon.woo/howto100m/howtoalign',}
+    'ai2'    : '/net/nfs3.prior/dongjook/',}
 
 # utils ----------------------------------------------------------
-
 def get_LB_model(args):
     clip_type = {'video': 'LanguageBind_Video_FT',}  # also LanguageBind_Video
-    # model     = LanguageBind(clip_type=clip_type, cache_dir='./cache_dir')
     cache_dir = '/net/nfs3.prior/dongjook/Language_Bind_cache'
     model     = LanguageBind(clip_type=clip_type, cache_dir=cache_dir)
     model     = model.to(args.device)
-    pretrained_ckpt = f'LanguageBind/LanguageBind_Image'
-    tokenizer = LanguageBindImageTokenizer.from_pretrained(pretrained_ckpt, cache_dir=f'{cache_dir}/tokenizer_cache_dir')
+    pretrained_ckpt = 'LanguageBind/LanguageBind_Image'
+    tokenizer = LanguageBindImageTokenizer.from_pretrained(pretrained_ckpt, 
+                                                        cache_dir=f'{cache_dir}/tokenizer_cache_dir')
     transform = Compose(
             [
                 # UniformTemporalSubsample(num_frames),
@@ -59,8 +56,8 @@ def get_LB_model(args):
                 RandomHorizontalFlipVideo(p=0.5),
             ])
     model.eval()
-
     return model, transform, tokenizer
+
 
 def get_total_video_dict(args):
     if args.dir_name == 'ai2':
@@ -72,16 +69,6 @@ def get_total_video_dict(args):
 
     elif args.dir_name == 'align':
         with open(os.path.join(LOAD_DIR[args.dir_name], 'htm_align_reformatted.json'), 'r') as f:
-            total_video_dict = json.load(f)
-
-    elif args.data_version == 'subset':
-        with open(os.path.join('/gallery_tate/dongyeon.woo/howto10m/sentencified_htm_subset.json'), 'r') as f:
-            total_video_dict = json.load(f)
-
-    else:
-        root_path = '/gallery_tate/dongyeon.woo/howto100m/sentencified/'
-        file_name = f'sentencified_htm_{args.data_version}_part{args.meta_part}.json'
-        with open(os.path.join(root_path, file_name), 'r') as f:
             total_video_dict = json.load(f)
 
     return total_video_dict
@@ -115,15 +102,11 @@ def get_preprocessed_frames_hdf5(args):
         if args.dir_name == 'ai2':
             if args.data_version == '370k':
                 hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_total.h5py'),'r')
-            elif args.data_version in ['730k', 'valid']:
+            else:
                 hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_part{args.meta_part}.h5py'),'r')
 
-        elif args.dir_name == 'align':
-            hdf5_file = h5py.File(os.path.join(LOAD_DIR[args.dir_name], f'preprocessed_frames.h5py'),'r')
-            args.use_hdf5_text_emb = False
         else:
             hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_part{args.meta_part}.h5py'),'r')
-            # hdf5_real_text_emb_file = h5py.File(os.path.join(LOAD_DIR[args.dir_name], f'real_text_emb_{args.dir_name}_{args.total}_{args.part}.hdf5'),'r')
     else:
         NotImplementedError
 
@@ -132,7 +115,10 @@ def get_preprocessed_frames_hdf5(args):
 
 def get_h5py_files(args):
     h5py_f = {}
-    h5py_f['clip_sim_f'] = h5py.File(os.path.join(args.save_path, f'clip_sim_part{args.meta_part}_{args.total}_{args.part}.hdf5'), 'a')
+    h5py_f['text_ids_h5'] = h5py.File(os.path.join(args.save_path, f'text_ids_part{args.meta_part}_{args.total}_{args.part}.h5'), 'a')
+    h5py_f['text_emb_h5'] = h5py.File(os.path.join(args.save_path, f'text_emb_part{args.meta_part}_{args.total}_{args.part}.h5'), 'a')
+    h5py_f['clip_emb_h5'] = h5py.File(os.path.join(args.save_path, f'clip_emb_part{args.meta_part}_{args.total}_{args.part}.h5'), 'a')
+    h5py_f['clip_sim_h5'] = h5py.File(os.path.join(args.save_path, f'ciip_sim_part{args.meta_part}_{args.total}_{args.part}.h5'), 'a')
 
     for key in h5py_f:
         h5py_f[key].flush()
@@ -159,7 +145,6 @@ class BaseDataset(Dataset, ABC):
     def collate_fn(self, batch):
         return default_collate(batch)
 
-
 # ================
 # HowTo100M  Datasets
 # ================
@@ -168,12 +153,9 @@ class HowTo100M(BaseDataset):
     def __init__(self, args, tokenizer, processor, valid_current_video_ids, hdf5_file=None, video_dict=None):
         super(HowTo100M, self).__init__()
 
-        self.args              = args
-        self.device            = args.device
-        self.feature_extractor = args.feature_extractor
-
-        self.debug        = args.debug
-        self.data_version = args.data_version
+        self.args   = args
+        self.debug  = args.debug
+        self.device = args.device
 
         self.max_frames = args.max_frames
         self.frame_idxs = [0,1,2,3,4,5,6,7] if self.max_frames==8 else [0,2,4,6] # UMT case
@@ -187,7 +169,6 @@ class HowTo100M(BaseDataset):
 
         self.video_dict = video_dict
         self.valid_current_video_ids = valid_current_video_ids
-
 
         # Set dataframe
         df = pd.DataFrame(columns = ['video_id', 'text_id'])
@@ -245,8 +226,6 @@ class HowTo100M(BaseDataset):
 
 
     def __getitem__(self, idx):
-        """
-        """
         data               = self.df.iloc[idx]
         video_id           = data['video_id']
         text_id            = data['text_id']
@@ -256,12 +235,20 @@ class HowTo100M(BaseDataset):
         return video_id, text_id, frames, raw_text, valid_flag
 
 
-def save_embeds_sims_chunk(args, clip_sim_dict, h5py_f):
+def save_embeds_sims_chunk(args, 
+                        text_ids_dict,
+                        text_emb_dict,
+                        clip_emb_dict,
+                        clip_sim_dict, h5py_f):
+
     # Save as single video id
     for video_id in clip_sim_dict.keys():
-        for key in h5py_f: # To overwrite
-            if video_id in h5py_f[key].keys():
-                del h5py_f[key][video_id]
+        # for key in h5py_f: # To overwrite
+        #     if video_id in h5py_f[key].keys():
+        #         del h5py_f[key][video_id]
+        h5py_f['text_ids_f'].create_dataset(video_id, data = text_ids_dict[video_id])
+        h5py_f['text_emb_f'].create_dataset(video_id, data = text_emb_dict[video_id])
+        h5py_f['clip_emb_f'].create_dataset(video_id, data = clip_emb_dict[video_id])
         h5py_f['clip_sim_f'].create_dataset(video_id, data = clip_sim_dict[video_id])
 
     # Flush
@@ -283,26 +270,23 @@ def save_embeds_sims_chunk(args, clip_sim_dict, h5py_f):
 def parse_args():
     parser = argparse.ArgumentParser()
     # For partition
-    parser.add_argument("--dir_name", type=str, default='moma', help="[moma, tate, getty, orsay]")
-    parser.add_argument("--meta_part", type=int, default=1, help="for mulit_running. which part?(1, ..., total)")
-    parser.add_argument("--part", type=int, default=1, help="for mulit_running. which part?(1, ..., total)")
-    parser.add_argument("--total", type=int, default=1, help="for multi_running. how many parts?")
+    parser.add_argument("--dir_name",  type=str, default='moma', help="[moma, tate, getty, orsay, ai2]")
+    parser.add_argument("--meta_part", type=int, default=1, help="after multi-downloading. which part?(0, ..., )")
+    parser.add_argument("--part",      type=int, default=1, help="for mulit_running. which part?(1, ..., total)")
+    parser.add_argument("--total",     type=int, default=1, help="for multi_running. how many parts?")
 
     # For dataloader 
-    parser.add_argument("--device", type=str, default='cuda')
-    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--device",      type=str, default='cuda')
+    parser.add_argument("--batch_size",  type=int, default=200, help="[100 for 24GB, 200 for 48GB]")
     parser.add_argument("--num_workers", type=int, default=4)
 
     # others
-    parser.add_argument("--data_version", type=str, default='730k', help="[subset, 1200k, 730k, 370k, valid]")
-    parser.add_argument("--feature_extractor", type=str, default='cv2_frames', help="[cv2_video, cv2_frames]")
-    parser.add_argument("--model_id", type=str, default='instructblip', help="[blip2, instructblip]")
-    parser.add_argument("--num_segment", type=int, default=200)
-    parser.add_argument("--flush", type=int, default=200)
+    parser.add_argument("--data_version", type=str, required=True, help="[subset, 1200k, 730k, 370k, valid]")
+    parser.add_argument("--num_segment",  type=int, default=200)
 
-    parser.add_argument("--debug", type=str, default='False')
+    parser.add_argument("--debug",      type=str, default='False')
     parser.add_argument("--frame_load", type=str, default='hdf5', help='[image, hdf5]')
-    parser.add_argument("--max_frames", type=int, default=8, help='[4,  8, 12]')
+    parser.add_argument("--max_frames", type=int, default=8, help='[4,  8]')
 
     return parser.parse_args()
 
@@ -344,8 +328,7 @@ def main(args):
         valid_current_video_ids = []
         for current_video_id in tqdm(current_video_ids):
             current_video_id_process_flag = os.path.exists(os.path.join(args.root_path, 'preprocessed_flag', current_video_id))
-            # current_video_id_done_flag    = os.path.exists(os.path.join(args.root_path, 'final_flag',        current_video_id))
-            current_video_id_done_flag    = (current_video_id in list(h5py_f['clip_sim_f'].keys()))
+            current_video_id_done_flag    = os.path.exists(os.path.join(args.root_path, 'final_flag',        current_video_id))
             if not args.debug:
                 if current_video_id_process_flag & (not current_video_id_done_flag):
                     valid_current_video_ids.append(current_video_id)
@@ -376,6 +359,9 @@ def main(args):
             shuffle     = False) # Don't need to shuffle for captioning
 
         print('Start batch')
+        text_ids_dict = {}
+        text_emb_dict = {}
+        clip_emb_dict = {}
         clip_sim_dict = {}
         step = 0
         with torch.no_grad():
@@ -398,22 +384,34 @@ def main(args):
                 texts['input_ids']      = texts['input_ids'].to(args.device)
                 texts['attention_mask'] = texts['attention_mask'].to(args.device)
 
-                inputs = {'video': {}}
+                inputs                          = {'video': {}}
                 inputs['video']['pixel_values'] = frames
                 inputs['language']              = texts
 
                 embeddings = model(inputs)
-                similarity = (embeddings['video'] @ embeddings['language'].T).detach().cpu().numpy()
-                similarity = np.diagonal(similarity)
-                for v_id, clip_sim in zip(video_ids, similarity):
+                clip_sim   = (embeddings['video'] @ embeddings['language'].T).detach().cpu().numpy()
+                clip_emb   = embeddings['video'].detach().cpu().numpy()
+                text_emb   = embeddings['language'].detach().cpu().numpy()
+                for idx, v_id in enumerate(video_ids):
                     if v_id not in clip_sim_dict.keys():
-                        clip_sim_dict[v_id] = clip_sim
+                        text_ids_dict[v_id] = text_ids[idx]
+                        text_emb_dict[v_id] = text_emb[idx]
+                        clip_emb_dict[v_id] = clip_emb[idx]
+                        clip_sim_dict[v_id] = clip_sim[idx]
                     else:
-                        clip_sim_dict[v_id] = np.vstack([clip_sim_dict[v_id], clip_sim])
+                        text_ids_dict[v_id] = np.vstack([text_ids_dict[idx], text_ids])
+                        text_emb_dict[v_id] = np.vstack([text_emb_dict[idx], text_emb])
+                        clip_emb_dict[v_id] = np.vstack([clip_emb_dict[idx], clip_emb])
+                        clip_sim_dict[v_id] = np.vstack([clip_sim_dict[idx], clip_sim])
 
                 step += 1
 
-            save_embeds_sims_chunk(args, clip_sim_dict, h5py_f,)
+            save_embeds_sims_chunk(args, 
+                                text_ids_dict, 
+                                text_emb_dict, 
+                                clip_emb_dict, 
+                                clip_sim_dict, 
+                                h5py_f,)
 
 
 if __name__ == "__main__":
