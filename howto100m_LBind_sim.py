@@ -246,11 +246,11 @@ def save_embeds_sims_chunk(args,
         # for key in h5py_f: # To overwrite
         #     if video_id in h5py_f[key].keys():
         #         del h5py_f[key][video_id]
-        h5py_f['text_ids_f'].create_dataset(video_id, data = text_ids_dict[video_id])
-        h5py_f['text_emb_f'].create_dataset(video_id, data = text_emb_dict[video_id])
-        h5py_f['clip_emb_f'].create_dataset(video_id, data = clip_emb_dict[video_id])
+        h5py_f['text_ids_h5'].create_dataset(video_id, data = text_ids_dict[video_id])
+        h5py_f['text_emb_h5'].create_dataset(video_id, data = text_emb_dict[video_id])
+        h5py_f['clip_emb_h5'].create_dataset(video_id, data = clip_emb_dict[video_id])
         similarity = clip_emb_dict[video_id] @ text_emb_dict[video_id].T
-        h5py_f['clip_sim_f'].create_dataset(video_id, data = similarity)
+        h5py_f['clip_sim_h5'].create_dataset(video_id, data = similarity)
 
     # Flush
     for key in h5py_f:
@@ -392,7 +392,7 @@ def main(args):
                 clip_emb   = embeddings['video'].detach().cpu().numpy()
                 text_emb   = embeddings['language'].detach().cpu().numpy()
                 for idx, v_id in enumerate(video_ids):
-                    if v_id not in clip_sim_dict.keys():
+                    if v_id not in clip_emb_dict.keys():
                         text_ids_dict[v_id] = np.array(text_ids[idx])
                         text_emb_dict[v_id] = text_emb[idx]
                         clip_emb_dict[v_id] = clip_emb[idx]
