@@ -239,17 +239,18 @@ def save_embeds_sims_chunk(args,
                         text_ids_dict,
                         text_emb_dict,
                         clip_emb_dict,
-                        clip_sim_dict, h5py_f):
+                        h5py_f):
 
     # Save as single video id
-    for video_id in clip_sim_dict.keys():
+    for video_id in clip_emb_dict.keys():
         # for key in h5py_f: # To overwrite
         #     if video_id in h5py_f[key].keys():
         #         del h5py_f[key][video_id]
         h5py_f['text_ids_f'].create_dataset(video_id, data = text_ids_dict[video_id])
         h5py_f['text_emb_f'].create_dataset(video_id, data = text_emb_dict[video_id])
         h5py_f['clip_emb_f'].create_dataset(video_id, data = clip_emb_dict[video_id])
-        h5py_f['clip_sim_f'].create_dataset(video_id, data = clip_sim_dict[video_id])
+        similarity = clip_emb_dict[video_id] @ text_emb_dict[video_id].T
+        h5py_f['clip_sim_f'].create_dataset(video_id, data = similarity)
 
     # Flush
     for key in h5py_f:
@@ -257,7 +258,7 @@ def save_embeds_sims_chunk(args,
 
     # Save flag after flush
     if not args.debug:
-        for video_id in clip_sim_dict.keys():
+        for video_id in clip_emb_dict.keys():
             flag_save_path = os.path.join(args.flag_dir, f'{video_id}')
             Path(flag_save_path).touch()
     else:
@@ -362,7 +363,6 @@ def main(args):
         text_ids_dict = {}
         text_emb_dict = {}
         clip_emb_dict = {}
-        clip_sim_dict = {}
         step = 0
         with torch.no_grad():
             pbar = tqdm(dataloader)
@@ -389,7 +389,6 @@ def main(args):
                 inputs['language']              = texts
 
                 embeddings = model(inputs)
-                clip_sim   = (embeddings['video'] @ embeddings['language'].T).detach().cpu().numpy()
                 clip_emb   = embeddings['video'].detach().cpu().numpy()
                 text_emb   = embeddings['language'].detach().cpu().numpy()
                 for idx, v_id in enumerate(video_ids):
@@ -397,12 +396,10 @@ def main(args):
                         text_ids_dict[v_id] = np.array(text_ids[idx])
                         text_emb_dict[v_id] = text_emb[idx]
                         clip_emb_dict[v_id] = clip_emb[idx]
-                        clip_sim_dict[v_id] = clip_sim[idx]
                     else:
                         text_ids_dict[v_id] = np.vstack([text_ids_dict[v_id], np.array(text_ids[idx])])
                         text_emb_dict[v_id] = np.vstack([text_emb_dict[v_id], text_emb[idx]])
                         clip_emb_dict[v_id] = np.vstack([clip_emb_dict[v_id], clip_emb[idx]])
-                        clip_sim_dict[v_id] = np.vstack([clip_sim_dict[v_id], clip_sim[idx]])
 
                 step += 1
 
@@ -410,7 +407,6 @@ def main(args):
                                 text_ids_dict, 
                                 text_emb_dict, 
                                 clip_emb_dict, 
-                                clip_sim_dict, 
                                 h5py_f,)
 
 
