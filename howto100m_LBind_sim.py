@@ -373,7 +373,7 @@ def main(args):
                     continue
                 video_ids = np.array(video_ids)[np.array(valid_flag)]
                 raw_texts = list(np.array(raw_texts)[np.array(valid_flag)])
-                text_ids  = text_ids[valid_flag]
+                text_ids  = np.array(text_ids)[np.array(valid_flag)]
                 texts     = dataset.tokenizer(raw_texts,
                                         max_length=dataset.max_words,
                                         padding='max_length',
@@ -394,7 +394,7 @@ def main(args):
                 text_emb   = embeddings['language'].detach().cpu().numpy()
                 for idx, v_id in enumerate(video_ids):
                     if v_id not in clip_sim_dict.keys():
-                        text_ids_dict[v_id] = text_ids[idx]
+                        text_ids_dict[v_id] = np.array(text_ids[idx])
                         text_emb_dict[v_id] = text_emb[idx]
                         clip_emb_dict[v_id] = clip_emb[idx]
                         clip_sim_dict[v_id] = clip_sim[idx]
