@@ -35,12 +35,13 @@ OPENAI_DATASET_MEAN = (0.48145466, 0.4578275,  0.40821073)
 OPENAI_DATASET_STD  = (0.26862954, 0.26130258, 0.27577711)
 
 LOAD_DIR = {
-    'ai2'    : '/net/nfs3.prior/dongjook/',}
+    'ai2'    : '/net/nfs3.prior/dongjook/',
+    'millet' : '/gallery_millet/chris.kim/data/howto100m/',}
 
 # utils ----------------------------------------------------------
 def get_LB_model(args):
     clip_type = {'video': 'LanguageBind_Video_FT',}  # also LanguageBind_Video
-    cache_dir = '/net/nfs3.prior/dongjook/Language_Bind_cache'
+    cache_dir = '/net/nfs3.prior/dongjook/Language_Bind_cache' if args.dir_name == 'ai2' else './cache_dir'
     model     = LanguageBind(clip_type=clip_type, cache_dir=cache_dir)
     model     = model.to(args.device)
     pretrained_ckpt = 'LanguageBind/LanguageBind_Image'
@@ -272,9 +273,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     # For partition
     parser.add_argument("--dir_name",  type=str, default='moma', help="[moma, tate, getty, orsay, ai2]")
-    parser.add_argument("--meta_part", type=int, default=1, help="after multi-downloading. which part?(0, ..., )")
-    parser.add_argument("--part",      type=int, default=1, help="for mulit_running. which part?(1, ..., total)")
-    parser.add_argument("--total",     type=int, default=1, help="for multi_running. how many parts?")
+    parser.add_argument("--meta_part", type=int, default=1,      help="after multi-downloading. which part?(0, ..., )")
+    parser.add_argument("--part",      type=int, default=1,      help="for mulit_running. which part?(1, ..., total)")
+    parser.add_argument("--total",     type=int, default=1,      help="for multi_running. how many parts?")
 
     # For dataloader 
     parser.add_argument("--device",      type=str, default='cuda')
