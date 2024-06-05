@@ -6,10 +6,6 @@ if __name__ == '__main__':
     device = torch.device(device)
     clip_type = {
         'video': 'LanguageBind_Video_FT',  # also LanguageBind_Video
-        'audio': 'LanguageBind_Audio_FT',  # also LanguageBind_Audio
-        'thermal': 'LanguageBind_Thermal',
-        'image': 'LanguageBind_Image',
-        'depth': 'LanguageBind_Depth',
     }
 
     model = LanguageBind(clip_type=clip_type, cache_dir='./cache_dir')
@@ -22,12 +18,12 @@ if __name__ == '__main__':
     video = ['assets/video/0.mp4', 'assets/video/1.mp4']
     language = ["Training a parakeet to climb up a ladder.", 'A lion climbing a tree to catch a monkey.']
 
-    for i in range(7):
-        video.extend(video)
-        language.extend(language)
-    video = video[:200]
-    language = language[:200]
-    print(len(video), len(language))
+    # for i in range(7):
+    #     video.extend(video)
+    #     language.extend(language)
+    # video = video[:200]
+    # language = language[:200]
+    # print(len(video), len(language))
 
     inputs = {
         'video': to_device(modality_transform['video'](video), device),
@@ -37,9 +33,18 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         embeddings = model(inputs)
-    from IPython import embed; embed(colors='neutral')  # XXX DEBUG  # yapf: disable
+    print(embeddings['video'][0].sum())
+    print(embeddings['language'][0].sum())
 
     print("Video x Text: \n",
           torch.softmax(embeddings['video'] @ embeddings['language'].T, dim=-1).detach().cpu().numpy())
 
+
+    with torch.no_grad():
+        embeddings = model(inputs)
+    print(embeddings['video'][0].sum())
+    print(embeddings['language'][0].sum())
+
+    print("Video x Text: \n",
+          torch.softmax(embeddings['video'] @ embeddings['language'].T, dim=-1).detach().cpu().numpy())
 
