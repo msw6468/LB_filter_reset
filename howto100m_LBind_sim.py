@@ -76,6 +76,9 @@ def get_total_video_dict(args):
         if args.data_version == '8frames_per_clip':
             with open(os.path.join(LOAD_DIR['tate'], 'sentencified', f'sentencified_htm_remaining_part{args.meta_part}.json'), 'r') as f:
                 total_video_dict = json.load(f)
+        elif args.data_version == 'leftovers':
+            with open(os.path.join(LOAD_DIR['moma'], 'leftovers', f'sentencified_htm_leftovers.json'), 'r') as f:
+                total_video_dict = json.load(f)
         else:
             with open(os.path.join(LOAD_DIR['tate'], 'sentencified', f'sentencified_htm_{args.data_version}_part{args.meta_part}.json'), 'r') as f:
                 total_video_dict = json.load(f)
@@ -112,6 +115,10 @@ def get_preprocessed_frames_hdf5(args):
         else: # our server
             if args.data_version == 'subset':
                 hdf5_file = h5py.File(f'/gallery_moma/sangwoo.moon/data/video/howto100m_LB/subset/preprocessed_frames_part{args.meta_part}.h5py', 'r')
+            elif args.data_version == 'valid':
+                hdf5_file = h5py.File(f'/gallery_millet/chris.kim/data/howto100m/valid/preprocessed_frames_part{args.meta_part}.h5py', 'r')
+            elif args.data_version == 'leftovers':
+                hdf5_file = h5py.File(f'/gallery_moma/sangwoo.moon/data/video/howto100m/leftovers/preprocessed_frames.h5py', 'r')
             elif args.data_version == '8frames_per_clip':
                 hdf5_file = h5py.File(os.path.join(args.root_path, f'preprocessed_frames_metapart{args.meta_part}_part{args.meta_sub_part}.h5py'),'r')
             else:
@@ -316,7 +323,7 @@ def main(args):
     args.root_path = os.path.join(LOAD_DIR[args.dir_name], args.data_version)
     args.save_path = os.path.join(args.root_path, 'LB') if not args.debug else os.path.join(args.root_path, 'LB', 'debug')
 
-    if (args.dir_name != 'ai2') and (args.data_version not in ['subset', 'valid']):
+    if (args.dir_name != 'ai2') and (args.data_version not in ['subset', 'valid', 'leftovers']):
         args.meta_sub_part = (args.part-1) // 4
 
     pprint(args)
