@@ -230,23 +230,26 @@ class VideoCC3M(BaseDataset):
                 if batch_idx[-1] == frameCount: del batch_idx[-1]
                 video_data = np.array(vr.get_batch(batch_idx))
 
-                image_data = torch.zeros((3, self.max_frames, 224 ,224))
+                image_data = torch.zeros((self.max_frames, 3, 224 ,224))
                 image_mask = torch.zeros(self.max_frames)
 
+                images = []
                 for i in range(len(video_data)):
                     images.append(self.processor(video_data[i]))
 
                 images = torch.stack(images)
-                images = images.permute(1, 0, 2, 3) # (T, H, W, C) -> (C, T, H, W)
 
                 image_data[:len(images)] = images
                 image_mask[:len(images)] = 1
+
+                images = images.permute(1, 0, 2, 3) # (T, H, W, C) -> (C, T, H, W)
+                images = torch.unsqueeze(images, dim=0) # (C, T, H ,W) -> (1, C, T, H, W)
 
                 return image_data, image_mask, True
 
             except Exception as e:
                 print(f'video_id {video_id}, text_id {text_id} sample is corrupted, {e}')
-                return torch.zeros((3, self.max_frames, 224, 224), dtype=torch.float), torch.zeros(self.max_frames), False # bad clip-captions
+                return torch.zeros((1, 3, self.max_frames, 224, 224), dtype=torch.float), torch.zeros(self.max_frames), False # bad clip-captions
 
         else:
             NotImplementedError
