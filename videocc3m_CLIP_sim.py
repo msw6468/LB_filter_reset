@@ -33,6 +33,7 @@ from languagebind import LanguageBind, LanguageBindImageTokenizer
 from clip.simple_tokenizer import SimpleTokenizer
 import clip
 from einops import rearrange, repeat
+from decord import VideoReader
 
 # from languagebind import to_device, transform_dict
 
@@ -40,10 +41,11 @@ OPENAI_DATASET_MEAN = (0.48145466, 0.4578275,  0.40821073)
 OPENAI_DATASET_STD  = (0.26862954, 0.26130258, 0.27577711)
 
 LOAD_DIR = {
-    'millet': '/gallery_millet/chris.kim/data/videocc3m/8frames_per_clip',
-    'tate'  : '/gallery_tate/dongyeon.woo/jongchan/videocc3m/8frames_per_clip',
-    'orsay' : '/gallery_orsay/sangwoo.moon/data/video/cc3m/8frames_per_clip',
-    'getty' : '/gallery_getty/dongjoo.kim/vision/cc3m/8frames_per_clip'
+    'orsay_1fps' : '/gallery_orsay/sangwoo.moon/data/video/cc3m/1fps_per_clip',
+    'millet'     : '/gallery_millet/chris.kim/data/videocc3m/8frames_per_clip',
+    'tate'       : '/gallery_tate/dongyeon.woo/jongchan/videocc3m/8frames_per_clip',
+    'orsay'      : '/gallery_orsay/sangwoo.moon/data/video/cc3m/8frames_per_clip',
+    'getty'      : '/gallery_getty/dongjoo.kim/vision/cc3m/8frames_per_clip'
 }
 
 # utils ----------------------------------------------------------
@@ -177,7 +179,7 @@ class VideoCC3M(BaseDataset):
         self.df = video_dict
 
 
-    def _get_frames(self, video_id=None, text_id=None):
+    def _get_frames(self, video_id=None, text_id=None, video_path=None):
         """ Get video information
         INPUT:
             video_id: video_id
@@ -213,6 +215,35 @@ class VideoCC3M(BaseDataset):
             except Exception as e:
                 print(f'video_id {video_id}, text_id {text_id} sample is corrupted, {e}')
                 return torch.zeros((3, self.max_frames, 224, 224), dtype=torch.float), False # bad clip-captions
+
+        elif self.args.frame_load == 'decord':
+            try:
+                vr          = VideoReader(video_path)
+                frameCount  = len(vr)
+                fps         = vr.get_avg_fps()
+
+                batch_idx = [round(idx) for idx in np.arange(0.0, frameCount, fps).tolist()]
+                if batch_idx[-1] == frameCount: del batch_idx[-1]
+                video_data = np.array(vr.get_batch(batch_idx))
+
+                image_data = torch.zeros((3, self.max_frames, 224 ,224))
+                image_mask = torch.zeros(self.max_frames)
+
+                for i in range(len(video_data)):
+                    images.append(self.processor(video_data[i]))
+
+                images = torch.stack(images)
+                images = images.permute(1, 0, 2, 3) # (T, H, W, C) -> (C, T, H, W)
+
+                image_data[:len(images)] = images
+                image_mask[:len(images)] = 1
+
+                return image_data, image_mask, True
+
+            except Exception as e:
+                print(f'video_id {video_id}, text_id {text_id} sample is corrupted, {e}')
+                return torch.zeros((3, self.max_frames, 224, 224), dtype=torch.float), torch.zeros(self.max_frames), False # bad clip-captions
+
         else:
             NotImplementedError
 
@@ -230,11 +261,16 @@ class VideoCC3M(BaseDataset):
     def __getitem__(self, idx):
         data               = self.df.iloc[idx]
         unique_id          = data['unique_index'] # use idx as unique identifier (name for dataset in h5 file)
-        video_id           = data['id']   
+        video_id           = data['id']
+        video_path         = data['video_path']
         raw_text           = data['caption']
-        frames, valid_flag = self._get_frames(video_id=video_id)
+        if self.args.frame_load == 'hdf5':
+            frames, valid_flag = self._get_frames(video_id=video_id, video_path = video_path)
+            return unique_id, frames, raw_text, valid_flag
+        elif self.args.frame_load == 'decord':
+            frames, frame_mask, valid_flag = self._get_frames(video_id=video_id, video_path = video_path)
+            return unique_id, frames, frame_mask, raw_text, valid_flag
 
-        return unique_id, frames, raw_text, valid_flag
 
 
 def save_embeds_sims_chunk(args,
@@ -289,8 +325,8 @@ def parse_args():
     parser.add_argument("--num_segment",  type=int, default=50)
 
     parser.add_argument("--debug",      type=str, default='False')
-    parser.add_argument("--frame_load", type=str, default='hdf5', help='[image, hdf5]')
-    parser.add_argument("--max_frames", type=int, default=8, help='[4,  8]')
+    parser.add_argument("--frame_load", type=str, default='hdf5', help='[image, hdf5, decord]')
+    parser.add_argument("--max_frames", type=int, default=8, help='[4, 8, 10]')
     parser.add_argument("--final_check", type=str, default='False', help='[True, False]')
     parser.add_argument("--clip_type", type=str, default='vit_l14', help='[vit_l14, vit_b16]')
 
@@ -300,7 +336,7 @@ def parse_args():
 def main(args):
     args.debug = True if args.debug == 'True' else False
     args.final_check = True if args.final_check == 'True' else False
-    args.root_path = os.path.join(LOAD_DIR['millet'])
+    args.root_path = os.path.join(LOAD_DIR['orsay_1fps'])
     args.save_path = os.path.join(args.root_path, f'CLIP_{args.clip_type}') if not args.debug else os.path.join(args.root_path, f'CLIP_{args.clip_type}', 'debug')
 
     pprint(args)
@@ -324,13 +360,22 @@ def main(args):
     os.makedirs(args.flag_dir, exist_ok=True, mode=0o777)
     h5py_f = get_h5py_files(args)
 
-    print(f'Load preprocessed_frames')
-    frames_h5 = get_preprocessed_frames_hdf5(args)
+    if args.frame_load == 'hdf5':
+        print(f'Load preprocessed_frames')
+        frames_h5 = get_preprocessed_frames_hdf5(args)
+    else:
+        frames_h5 = None
 
     # remove processed indexs
-    # processed_index_list = os.listdir(args.flag_dir)
-    # processed_index_list = list(map(int, processed_index_list))
-    # total_video_dict   = total_video_dict[~total_video_dict['unique_index'].isin(processed_index_list)]
+    if args.final_check:
+        print(f'Final check processed frames removal')
+        processed_index_list = list(h5py_f['clip_sim_h5'].keys())
+        processed_index_list = list(map(int, processed_index_list))
+    else:
+        processed_index_list = os.listdir(args.flag_dir)
+        processed_index_list = list(map(int, processed_index_list))
+    total_video_dict   = total_video_dict[~total_video_dict['unique_index'].isin(processed_index_list)]
+    print(f'After remove processed indexes : {len(total_video_dict)}')
 
     dataset  = VideoCC3M(
         args       = args,
@@ -338,7 +383,7 @@ def main(args):
         processor  = transform,
         video_dict = total_video_dict,
         frames_h5  = frames_h5,)
-
+    
     dataloader = DataLoader(
         dataset,
         batch_size  = args.batch_size,
@@ -348,7 +393,6 @@ def main(args):
         pin_memory  = True,  # better when training on GPU.
         shuffle     = False) # Don't need to shuffle for captioning
 
-
     print('Start batch')
     step = 0
     with torch.no_grad():
@@ -356,7 +400,11 @@ def main(args):
         pbar = tqdm(dataloader)
         for batch in pbar:
             pbar.set_description(f"[{args.part:2d}/{args.total:2d}] [#clips: {len(dataset)}]")
-            unique_ids, frames, raw_texts, valid_flag = batch
+            if args.frame_load == 'decord':
+                unique_ids, frames, frame_mask, raw_texts, valid_flag = batch
+            else:
+                unique_ids, frames, raw_texts, valid_flag = batch
+
             if np.sum(np.array(valid_flag)) == 0:
                 continue # ignore current batch when all clips are bad
             unique_ids = np.array(unique_ids)[np.array(valid_flag)]
@@ -370,7 +418,7 @@ def main(args):
             # texts['attention_mask'] = texts['attention_mask'].to(args.device)
             # ---------------------------------------------
             max_words = 77
-            n_caption  = len(raw_texts)
+            n_caption = len(raw_texts)
             text_info = np.zeros((n_caption, 77), dtype=np.longlong)
             text_mask = np.zeros((n_caption, 77), dtype=int)
 
@@ -394,8 +442,8 @@ def main(args):
                 text_info[i] = np.array(input_ids)
                 text_mask[i] = np.array(input_mask)
             # ---------------------------------------------
-            frames    = frames[valid_flag].to(args.device)
-            text_info = torch.tensor(text_info).to(args.device)
+            frames     = frames[valid_flag].to(args.device)
+            text_info  = torch.tensor(text_info).to(args.device)
             # ---------------------------------------------
             frames    = rearrange(frames, 'B C F H W -> (B F) C H W')
             frame_emb = model.encode_image(frames)
@@ -411,12 +459,17 @@ def main(args):
             text_emb   = text_emb.detach().cpu().numpy()
             similarity = similarity.detach().cpu().numpy()
 
-            for u_id, c_emb, t_emb, sim in zip(unique_ids, clip_emb, text_emb, similarity):
+            if args.frame_load == 'decord':
+                frame_mask = np.array(frame_mask[valid_flag])
+
+            for u_id, c_emb, t_emb, sim, f_mask in zip(unique_ids, clip_emb, text_emb, similarity, frame_mask):
                 if str(u_id) in h5py_f['clip_sim_h5'].keys():
                     del h5py_f['clip_sim_h5'][str(u_id)]
                     del h5py_f['text_emb_h5'][str(u_id)]
                     del h5py_f['clip_emb_h5'][str(u_id)]
 
+                from IPython import embed; embed(colors='neutral')  # XXX DEBUG  # yapf: disable
+                sim = sim[f_mask]
                 h5py_f['text_emb_h5'].create_dataset(str(u_id), data = t_emb)
                 h5py_f['clip_emb_h5'].create_dataset(str(u_id), data = c_emb)
                 h5py_f['clip_sim_h5'].create_dataset(str(u_id), data = np.array([[sim]]))

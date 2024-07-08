@@ -164,8 +164,12 @@ class VideoCC3M(BaseDataset):
         if self.args.frame_load == 'hdf5':
             try:
                 # Load from frame -----------------------------------------
-                from IPython import embed; embed(colors='neutral')  # XXX DEBUG  # yapf: disable
                 binary_images = self.frames_h5[video_id][...]
+                if self.args.reverse:
+                    binary_images = binary_images[::-1]
+                if self.args.random:
+                    binary_images = np.random.permutation(binary_images)
+
                 images = []
                 for binary_image in binary_images:
                     images.append(self.processor(Image.open(io.BytesIO(binary_image))))
@@ -267,6 +271,7 @@ def parse_args():
     parser.add_argument("--final_check",type=str, default='False', help='[True, False]')
     parser.add_argument("--reverse",    type=str, default='False', help='[True, False]')
     parser.add_argument("--random",     type=str, default='False', help='[True, False]')
+    parser.add_argument("--random_seed",type=int, default=2, help='[True, False]')
 
     return parser.parse_args()
 
@@ -276,8 +281,15 @@ def main(args):
     args.final_check = True if args.final_check == 'True' else False
     args.reverse     = True if args.reverse     == 'True' else False
     args.random      = True if args.random      == 'True' else False
-    args.root_path = os.path.join(LOAD_DIR['millet'])
-    args.save_path = os.path.join(args.root_path, 'LB') if not args.debug else os.path.join(args.root_path, 'LB', 'debug')
+    if args.random:
+        np.random.seed(args.random_seed)
+    args.root_path = os.path.join(LOAD_DIR['orsay'])
+    if args.reverse:
+        args.save_path = os.path.join(args.root_path, 'LB_reverse') if not args.debug else os.path.join(args.root_path, 'LB_reverse', 'debug')
+    elif args.random:
+        args.save_path = os.path.join(args.root_path, 'LB_random') if not args.debug else os.path.join(args.root_path, 'LB_random', 'debug')
+    else:
+        args.save_path = os.path.join(args.root_path, 'LB') if not args.debug else os.path.join(args.root_path, 'LB', 'debug')
 
     pprint(args)
     print(f'Debug mode: {args.debug}')
@@ -301,9 +313,15 @@ def main(args):
     frames_h5 = get_preprocessed_frames_hdf5(args)
 
     # remove processed indexs
-    # processed_index_list = os.listdir(args.flag_dir)
-    # processed_index_list = list(map(int, processed_index_list))
-    # total_video_dict   = total_video_dict[~total_video_dict['unique_index'].isin(processed_index_list)]
+    if args.final_check:
+        print(f'Final check processed frames removal')
+        processed_index_list = list(h5py_f['clip_sim_h5'].keys())
+        processed_index_list = list(map(int, processed_index_list))
+    else:
+        processed_index_list = os.listdir(args.flag_dir)
+        processed_index_list = list(map(int, processed_index_list))
+    total_video_dict   = total_video_dict[~total_video_dict['unique_index'].isin(processed_index_list)]
+    print(f'After remove processed indexes : {len(total_video_dict)}')
 
     dataset  = VideoCC3M(
         args       = args,
