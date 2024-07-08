@@ -70,11 +70,11 @@ LOAD_DIR = {
 #     return model, transform, tokenizer
 
 def get_CLIP_model(args):
-    # model_path = '/net/nfs3.prior/dongjook/Language_Bind_cache' if args.dir_name == 'ai2' else './cache_dir'
+    model_root_path = '/net/nfs3.prior/dongjook/Language_Bind_cache' if args.dir_name == 'ai2' else '/gallery_moma/sangwoo.moon/.cache'
     if args.clip_type =='vit_l14':
-        model_path = '/gallery_moma/sangwoo.moon/.cache/clip/ViT-L-14.pt'
+        model_path = f'{model_root_path}/clip/ViT-L-14.pt'
     elif args.clip_type =='vit_b16':
-        model_path = '/gallery_moma/sangwoo.moon/.cache/clip/ViT-B-16.pt'
+        model_path = f'{model_root_path}/clip/ViT-B-16.pt'
     else:
         NotImplementedError
 
@@ -231,7 +231,7 @@ class VideoCC3M(BaseDataset):
                 video_data = np.array(vr.get_batch(batch_idx))
 
                 image_data = torch.zeros((self.max_frames, 3, 224 ,224))
-                image_mask = torch.zeros(self.max_frames)
+                image_mask = np.zeros(self.max_frames)
 
                 images = []
                 for i in range(len(video_data)):
@@ -241,9 +241,10 @@ class VideoCC3M(BaseDataset):
 
                 image_data[:len(images)] = images
                 image_mask[:len(images)] = 1
+                image_mask = np.array(image_mask, dtype=bool)
 
-                images = images.permute(1, 0, 2, 3) # (T, H, W, C) -> (C, T, H, W)
-                images = torch.unsqueeze(images, dim=0) # (C, T, H ,W) -> (1, C, T, H, W)
+                image_data = image_data.permute(1, 0, 2, 3) # (T, H, W, C) -> (C, T, H, W)
+                # images = torch.unsqueeze(images, dim=0) # (C, T, H ,W) -> (1, C, T, H, W)
 
                 return image_data, image_mask, True
 
@@ -461,7 +462,7 @@ def main(args):
             text_emb  = model.encode_text(text_info)
             text_emb  = text_emb / text_emb.norm(dim=1, keepdim=True)
 
-            clip_emb   = rearrange(frame_emb, '(B F) feature_dim -> B F feature_dim', F = 8) # (B, F, 512)
+            clip_emb   = rearrange(frame_emb, '(B F) feature_dim -> B F feature_dim', F = args.max_frames) # (B, F, 512)
             text_emb   = rearrange(text_emb, 'B feature_dim -> B feature_dim 1') # -> (B, F, 1)
             similarity = torch.bmm(clip_emb, text_emb).squeeze(2) # -> (B, F)
 
@@ -478,8 +479,10 @@ def main(args):
                     del h5py_f['text_emb_h5'][str(u_id)]
                     del h5py_f['clip_emb_h5'][str(u_id)]
 
-                from IPython import embed; embed(colors='neutral')  # XXX DEBUG  # yapf: disable
                 sim = sim[f_mask]
+                c_emb = c_emb[f_mask]
+                t_emb = t_emb[f_mask]
+
                 h5py_f['text_emb_h5'].create_dataset(str(u_id), data = t_emb)
                 h5py_f['clip_emb_h5'].create_dataset(str(u_id), data = c_emb)
                 h5py_f['clip_sim_h5'].create_dataset(str(u_id), data = np.array([[sim]]))
