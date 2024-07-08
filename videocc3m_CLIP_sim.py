@@ -41,6 +41,7 @@ OPENAI_DATASET_MEAN = (0.48145466, 0.4578275,  0.40821073)
 OPENAI_DATASET_STD  = (0.26862954, 0.26130258, 0.27577711)
 
 LOAD_DIR = {
+    'ai2'        : '/net/nfs3.prior/dongjook/videocc3m',
     'orsay_1fps' : '/gallery_orsay/sangwoo.moon/data/video/cc3m/1fps_per_clip',
     'millet'     : '/gallery_millet/chris.kim/data/videocc3m/8frames_per_clip',
     'tate'       : '/gallery_tate/dongyeon.woo/jongchan/videocc3m/8frames_per_clip',
@@ -92,7 +93,10 @@ def get_CLIP_model(args):
     return model, transform, tokenizer
 
 def get_total_video_dict(args):
-    file_name = f'/gallery_millet/chris.kim/data/videocc3m/video_cc_3m_final_part{args.meta_part}.csv'
+    if args.dir_name == 'ai2':
+        file_name = f'{LOAD_DIR[args.dir_name]}/video_cc_3m_final_part{args.meta_part}.csv'
+    else:
+        file_name = f'/gallery_millet/chris.kim/data/videocc3m/video_cc_3m_final_part{args.meta_part}.csv'
     total_video_dict = pd.read_csv(file_name, index_col=0)
     return total_video_dict
 
@@ -336,7 +340,10 @@ def parse_args():
 def main(args):
     args.debug = True if args.debug == 'True' else False
     args.final_check = True if args.final_check == 'True' else False
-    args.root_path = os.path.join(LOAD_DIR['orsay_1fps'])
+    if args.dir_name == 'ai2':
+        args.root_path = os.path.join(LOAD_DIR['ai2'])
+    else:
+        args.root_path = os.path.join(LOAD_DIR['orsay_1fps'])
     args.save_path = os.path.join(args.root_path, f'CLIP_{args.clip_type}') if not args.debug else os.path.join(args.root_path, f'CLIP_{args.clip_type}', 'debug')
 
     pprint(args)
