@@ -181,6 +181,11 @@ class VideoCC3M(BaseDataset):
 
         # Set dataframe
         self.df = video_dict
+        if self.args.dir_name == 'ai2':
+            self.df['video_path'] = self.df['video_path'].str.replace(
+                '/gallery_millet/chris.kim/data/videocc3m/clips_final',
+                f'{LOAD_DIR["ai2"]}/clips_final'
+            )
 
 
     def _get_frames(self, video_id=None, text_id=None, video_path=None):
@@ -227,7 +232,10 @@ class VideoCC3M(BaseDataset):
                 fps         = vr.get_avg_fps()
 
                 batch_idx = [round(idx) for idx in np.arange(0.0, frameCount, fps).tolist()]
+
                 if batch_idx[-1] == frameCount: del batch_idx[-1]
+                if len(batch_idx) == 11: batch_idx = batch_idx[:10] 
+
                 video_data = np.array(vr.get_batch(batch_idx))
 
                 image_data = torch.zeros((self.max_frames, 3, 224 ,224))
@@ -481,7 +489,6 @@ def main(args):
 
                 sim = sim[f_mask]
                 c_emb = c_emb[f_mask]
-                t_emb = t_emb[f_mask]
 
                 h5py_f['text_emb_h5'].create_dataset(str(u_id), data = t_emb)
                 h5py_f['clip_emb_h5'].create_dataset(str(u_id), data = c_emb)
