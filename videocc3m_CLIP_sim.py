@@ -34,7 +34,6 @@ from clip.simple_tokenizer import SimpleTokenizer
 import clip
 from einops import rearrange, repeat
 from decord import VideoReader
-
 # from languagebind import to_device, transform_dict
 
 OPENAI_DATASET_MEAN = (0.48145466, 0.4578275,  0.40821073)
@@ -482,10 +481,18 @@ def main(args):
                 frame_mask = np.array(frame_mask[valid_flag])
 
             for u_id, c_emb, t_emb, sim, f_mask in zip(unique_ids, clip_emb, text_emb, similarity, frame_mask):
-                if str(u_id) in h5py_f['clip_sim_h5'].keys():
-                    del h5py_f['clip_sim_h5'][str(u_id)]
-                    del h5py_f['text_emb_h5'][str(u_id)]
-                    del h5py_f['clip_emb_h5'][str(u_id)]
+                if args.final_check:
+                    if (str(u_id) in h5py_f['clip_sim_h5'].keys()):
+                        del h5py_f['clip_sim_h5'][str(u_id)]
+                    if (str(u_id) in h5py_f['text_emb_h5'].keys()):
+                        del h5py_f['text_emb_h5'][str(u_id)]
+                    if (str(u_id) in h5py_f['clip_emb_h5'].keys()):
+                        del h5py_f['clip_emb_h5'][str(u_id)]
+                else:
+                    if str(u_id) in h5py_f['clip_sim_h5'].keys():
+                        del h5py_f['clip_sim_h5'][str(u_id)]
+                        del h5py_f['text_emb_h5'][str(u_id)]
+                        del h5py_f['clip_emb_h5'][str(u_id)]
 
                 sim = sim[f_mask]
                 c_emb = c_emb[f_mask]
