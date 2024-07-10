@@ -233,7 +233,7 @@ class VideoCC3M(BaseDataset):
                 batch_idx = [round(idx) for idx in np.arange(0.0, frameCount, fps).tolist()]
 
                 if batch_idx[-1] == frameCount: del batch_idx[-1]
-                if len(batch_idx) == 11: batch_idx = batch_idx[:10] 
+                if len(batch_idx) == 11: batch_idx = batch_idx[:10]
 
                 video_data = np.array(vr.get_batch(batch_idx))
 
@@ -401,7 +401,7 @@ def main(args):
         processor  = transform,
         video_dict = total_video_dict,
         frames_h5  = frames_h5,)
-    
+
     dataloader = DataLoader(
         dataset,
         batch_size  = args.batch_size,
@@ -497,9 +497,12 @@ def main(args):
                 sim = sim[f_mask]
                 c_emb = c_emb[f_mask]
 
+                from IPython import embed; embed(colors="neutral")  # XXX DEBUG  # yapf: disable
+
+
                 h5py_f['text_emb_h5'].create_dataset(str(u_id), data = t_emb)
                 h5py_f['clip_emb_h5'].create_dataset(str(u_id), data = c_emb)
-                h5py_f['clip_sim_h5'].create_dataset(str(u_id), data = np.array([[sim]]))
+                h5py_f['clip_sim_h5'].create_dataset(str(u_id), data = np.exapnd_dims(sim, axis=1))
                 h5py_f['text_emb_h5'].flush()
                 h5py_f['clip_emb_h5'].flush()
                 h5py_f['clip_sim_h5'].flush()
@@ -508,7 +511,7 @@ def main(args):
 
             step += 1
 
-    
+
     for key in h5py_f.keys():
         h5py_f[key].close()
 
