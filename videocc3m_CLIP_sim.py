@@ -105,7 +105,6 @@ def get_partitioned_dict(total_video_dict, total, part):
         return total_video_dict
 
     if args.total > 1:
-        total_video_list = list(total_video_dict)
         total_size       = len(total_video_dict)
         part_size        = int(total_size / total)
 
