@@ -8,6 +8,7 @@ from glob import glob
 import h5py
 
 LOAD_DIR = {
+    'ai2'   : '/net/nfs3.prior/dongjook/videocc3m',
     'millet': '/gallery_millet/chris.kim/data/videocc3m/8frames_per_clip',
     'tate'  : '/gallery_tate/dongyeon.woo/jongchan/videocc3m/8frames_per_clip',
     'orsay' : '/gallery_orsay/sangwoo.moon/data/video/cc3m/8frames_per_clip',
@@ -16,11 +17,16 @@ LOAD_DIR = {
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--dir_name",        type=str, required=True,   help="[millet,tate,orsay,getty]")
-    parser.add_argument("--model",           type=str, required=True,   help="[LB, UMT, CLIP_vit_b16, CLIP_vit_l14]")
-    parser.add_argument("--merge_type",      type=str, required=True,
-                        help="[merge_frames, merge_data_version, merge_all_to_total]")
-    parser.add_argument("--debug",           action='store_true', help="--debug if you debug")
+    parser.add_argument("--dir_name",  type=str, required=True,   help="[millet,tate,orsay,getty,ai2]")
+    parser.add_argument("--model",     type=str, required=True,   help="[LB, UMT, CLIP_vit_b16, CLIP_vit_l14]")
+    parser.add_argument("--merge_type",type=str, required=True,
+                        help="[merge_videocc3m_all, merge_single_part]")
+
+    parser.add_argument("--meta_part", type=str, help="after multi-downloading. which part?(0, ..., )")
+    parser.add_argument("--part",      type=str, help="for mulit_running. which part?(1, ..., total)")
+    parser.add_argument("--total",     type=str, help="for multi_running. how many parts?")
+
+    parser.add_argument("--debug",     action='store_true', help="--debug if you debug")
     return parser.parse_args()
 
 
@@ -30,14 +36,14 @@ def main(args):
             DATA_TYPE = [
                 # For LB
                 #'text_ids',
-                #'clip_sim',
+                'clip_sim',
                 'text_emb',
                 'clip_emb',
                 ]
         elif args.model == 'UMT':
             DATA_TYPE = [
                 # For UMT
-                'text_ids',
+                'text_ids'
                 'clip_sim',
                 ]
         else:
@@ -46,14 +52,14 @@ def main(args):
     if args.merge_type == 'merge_videocc3m_all':
         """ merge all files based on model
         """
-        root_dir = os.path.join('/gallery_millet/chris.kim/data/videocc3m/similarity', args.model)
+        root_dir = os.path.join(LOAD_DIR[args.dir_name], args.model)
         os.makedirs(root_dir, exist_ok=True)
 
         for data_type in DATA_TYPE:
             print(data_type)
 
             source_file_list = []
-            source_file_list.extend(glob(os.path.join(LOAD_DIR['orsay'], args.model, f'{data_type}_part*_*_*.h5')))
+            source_file_list.extend(glob(os.path.join(LOAD_DIR[args.dir_name], args.model, f'{data_type}_part*_*_*.h5')))
             source_file_list.sort()
 
             print(f'source_file_list = {len(source_file_list)}')
@@ -82,31 +88,43 @@ def main(args):
                 target_h5.close()
 
 
-    if args.merge_type == 'merge_data_version':
-        """ merge all files based on data_version, data_type, model
+    if args.merge_type == 'merge_single_part':
+        """ merge all files based on meta_total_part
         """
-        root_dir = os.path.join(LOAD_DIR[args.dir_name], args.data_version, args.model)
-        for data_type in DATA_TYPE:
-            target_file = os.path.join(root_dir, f'{data_type}_total.h5')
-            target_h5  = h5py.File(target_file, 'a')
-            os.chmod(target_h5.filename, mode=0o777)
-            if data_type == 'preprocessed_frames':
-                source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*.h5py'))
-            else:
-                source_file_list = glob(os.path.join(root_dir, f'{data_type}_part*_*_*.h5'))
+        root_dir = os.path.join(LOAD_DIR[args.dir_name], args.model)
+        os.makedirs(root_dir, exist_ok=True)
 
+        for data_type in DATA_TYPE:
+            print(data_type)
+
+            source_file_list = []
+            source_file_list.extend(glob(os.path.join(root_dir, f'{data_type}_part{args.meta_part}_{args.total}_{args.part}.h5')))
             source_file_list.sort()
-            count = 0
-            for source_file in tqdm(source_file_list):
-                source_h5 = h5py.File(source_file, 'r')
-                for vid in tqdm(source_h5.keys()):
-                    try:
-                        target_h5.create_dataset(vid, data = source_h5[vid][...])
-                    except:
-                        print(vid, e)
-            print(count)
-            target_h5.flush()
-            target_h5.close()
+
+            print(f'source_file_list = {len(source_file_list)}')
+            if args.debug:
+                count = 0
+                for source_file in tqdm(source_file_list):
+                    source_h5 = h5py.File(source_file, 'r')
+                    print(len(source_h5), source_h5.filename)
+                    count += len(source_h5)
+                print(count)
+            else:
+                target_file = os.path.join(root_dir, f'{data_type}_total.h5')
+                target_h5   = h5py.File(target_file, 'a')
+                os.chmod(target_h5.filename, mode=0o777)
+                for source_file in tqdm(source_file_list):
+                    print(source_file)
+                    source_h5 = h5py.File(source_file, 'r')
+                    for vid in tqdm(source_h5.keys()):
+                        try:
+                            target_h5.create_dataset(vid, data = source_h5[vid][...])
+                        except Exception as e:
+                            print(vid, e)
+                print(len(target_h5))
+
+                target_h5.flush()
+                target_h5.close()
 
     elif args.merge_type == 'merge_all_to_total':
         """ merge all files based on model
