@@ -497,12 +497,9 @@ def main(args):
                 sim = sim[f_mask]
                 c_emb = c_emb[f_mask]
 
-                from IPython import embed; embed(colors="neutral")  # XXX DEBUG  # yapf: disable
-
-
                 h5py_f['text_emb_h5'].create_dataset(str(u_id), data = t_emb)
                 h5py_f['clip_emb_h5'].create_dataset(str(u_id), data = c_emb)
-                h5py_f['clip_sim_h5'].create_dataset(str(u_id), data = np.exapnd_dims(sim, axis=1))
+                h5py_f['clip_sim_h5'].create_dataset(str(u_id), data = np.expand_dims(sim, axis=1))
                 h5py_f['text_emb_h5'].flush()
                 h5py_f['clip_emb_h5'].flush()
                 h5py_f['clip_sim_h5'].flush()
